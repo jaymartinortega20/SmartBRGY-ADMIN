@@ -2752,3 +2752,49 @@ textarea::placeholder {
     box-shadow: 20px 0 40px #173c2226;
   }
 }
+/* Export to Excel */
+.export-button {
+  color: var(--green);
+}
+.export-icon {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.export-periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.export-periods button {
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.export-periods button.active {
+  color: white;
+  background: var(--green);
+  border-color: var(--green);
+}
+.export-dates {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.export-dates input {
+  width: 100%;
+  border: 1px solid #d9e2da;
+  background: #fbfdfb;
+  border-radius: 10px;
+  padding: 10px 11px;
+  font: inherit;
+}
+@media (max-width: 720px) {
+  .export-button span {
+    display: none;
+  }
+}

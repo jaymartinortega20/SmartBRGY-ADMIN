@@ -16,6 +16,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock,
+  FileSpreadsheet,
   FileText,
   Gauge,
   Info as InfoIcon,
@@ -36,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
+import { exportBarangayReport, type ExportRange } from "./lib/exportExcel";
 
 type Row = Record<string, any>;
 type Section =
@@ -243,6 +245,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [data, setData] = useState(emptyData);
   const [adminName, setAdminName] = useState("Barangay Administrator");
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -783,6 +786,14 @@ export default function Home() {
               )}
             </div>
             <button
+              className="refresh-button export-button"
+              onClick={() => setExportOpen(true)}
+              title="Download an Excel report of all transactions"
+            >
+              <FileSpreadsheet size={18} />
+              <span>Export to Excel</span>
+            </button>
+            <button
               className="refresh-button"
               onClick={() => loadDashboard()}
               disabled={loading}
@@ -793,6 +804,16 @@ export default function Home() {
             </button>
           </div>
         </header>
+
+        {exportOpen && (
+          <ExportDialog
+            data={data}
+            preparedBy={adminName}
+            onClose={() => setExportOpen(false)}
+            notify={notify}
+            showError={showError}
+          />
+        )}
 
         <div className="content">
           {error && (
@@ -896,6 +917,121 @@ export default function Home() {
         ))}
       </div>
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Export to Excel: one file with a Summary tally and a sheet per record type.
+// ---------------------------------------------------------------------------
+type ExportPeriod = "this_month" | "last_month" | "this_year" | "all" | "custom";
+
+function exportRangeFor(period: ExportPeriod, from: string, to: string): ExportRange | null {
+  const now = new Date();
+  const month = (date: Date) =>
+    date.toLocaleDateString("en-PH", { month: "long", year: "numeric" });
+  if (period === "this_month") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { label: month(start), from: start, to: new Date(now.getFullYear(), now.getMonth() + 1, 1) };
+  }
+  if (period === "last_month") {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return { label: month(start), from: start, to: new Date(now.getFullYear(), now.getMonth(), 1) };
+  }
+  if (period === "this_year") {
+    return {
+      label: `Year ${now.getFullYear()}`,
+      from: new Date(now.getFullYear(), 0, 1),
+      to: new Date(now.getFullYear() + 1, 0, 1),
+    };
+  }
+  if (period === "all") return { label: "All records", from: null, to: null };
+  if (!from || !to) return null;
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  end.setDate(end.getDate() + 1); // include the whole "To" day
+  if (end <= start) return null;
+  return { label: `${from} to ${to}`, from: start, to: end };
+}
+
+function ExportDialog({ data, preparedBy, onClose, notify, showError }: any) {
+  const [period, setPeriod] = useState<ExportPeriod>("this_month");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [working, setWorking] = useState(false);
+  const range = exportRangeFor(period, from, to);
+
+  const download = async () => {
+    if (!range) return;
+    setWorking(true);
+    try {
+      await exportBarangayReport(data, range, statusLabel, preparedBy);
+      notify(`Excel report for ${range.label} downloaded.`);
+      onClose();
+    } catch (error: any) {
+      showError(error?.message || "The Excel file could not be created.");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const options: [ExportPeriod, string][] = [
+    ["this_month", "This month"],
+    ["last_month", "Last month"],
+    ["this_year", "This year"],
+    ["all", "All records"],
+    ["custom", "Choose dates"],
+  ];
+
+  return (
+    <div className="confirm-backdrop" onClick={() => !working && onClose()}>
+      <section
+        className="confirm-modal export-modal"
+        role="dialog"
+        aria-modal="true"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <span className="confirm-icon export-icon">
+          <FileSpreadsheet size={30} />
+        </span>
+        <h2>Export to Excel</h2>
+        <p>
+          Downloads one Excel file with a <strong>Summary</strong> tally plus sheets for
+          Document Requests, Incident Reports, Help Desk, Announcements and Residents.
+        </p>
+        <div className="export-periods">
+          {options.map(([value, label]) => (
+            <button
+              key={value}
+              className={period === value ? "active" : ""}
+              onClick={() => setPeriod(value)}
+              disabled={working}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {period === "custom" && (
+          <div className="export-dates">
+            <label>
+              From
+              <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            </label>
+            <label>
+              To
+              <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            </label>
+          </div>
+        )}
+        <div className="confirm-actions">
+          <button className="secondary-button" onClick={onClose} disabled={working}>
+            Cancel
+          </button>
+          <button className="primary-button" onClick={download} disabled={working || !range}>
+            {working ? "Preparing…" : "Download Excel"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
